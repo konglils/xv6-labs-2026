@@ -98,7 +98,7 @@ memdump(char *fmt, char *data, int len)
         ne = 1;
       }
       break;
-      
+
     case 'c':
       if (len >= 1) {
         printf("%c\n", *data);

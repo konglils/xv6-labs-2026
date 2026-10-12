@@ -20,7 +20,7 @@ runcmd(int argc, char *argv[], char *path)
   case -1:
     fprintf(2, "find: fork failed\n");
     break;
-  
+
   case 0:
     for (i = 0; i < argc; i++) {
       buf[i] = argv[i];
@@ -61,9 +61,7 @@ find(char *buf, int maxsize, char *filename, int argc, char *argv[])
 
   while (read(fd, &de, sizeof(de)) == sizeof(de)) {
     memmove(name, de.name, DIRSIZ);
-    if (de.inum == 0
-        || strcmp(name, ".") == 0
-        || strcmp(name, "..") == 0)
+    if (de.inum == 0 || strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
       continue;
 
     strcpy(buf + dirlen + 1, name);
