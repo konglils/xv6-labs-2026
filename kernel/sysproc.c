@@ -110,3 +110,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_interpose(void)
+{
+  int smask;
+
+  argint(0, &smask);
+  myproc()->smask |= smask; // "or" means child cannot cover parent's mask
+  return 0;
+}

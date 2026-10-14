@@ -301,6 +301,8 @@ kfork(void)
   np->state = RUNNABLE;
   release(&np->lock);
 
+  np->smask = p->smask;
+
   return pid;
 }
 
