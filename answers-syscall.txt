@@ -1,0 +1,6 @@
+usertrap
+15. represent syscall open
+user mode
+lw	a3,0(zero). a3 corresponds to num
+address 0 is invalid in kernel address space. address 0 is unused in physical address space. scause=0xd (13) means load page fault
+init. 1
