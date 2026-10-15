@@ -302,6 +302,7 @@ kfork(void)
   release(&np->lock);
 
   np->smask = p->smask;
+  strncpy(np->spath, p->spath, MAXPATH);
 
   return pid;
 }

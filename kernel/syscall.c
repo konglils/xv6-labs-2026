@@ -139,16 +139,24 @@ void
 syscall(void)
 {
   int num;
+  char path[MAXPATH];
   struct proc *p = myproc();
 
   num = p->trapframe->a7;
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    if ((1 << num) & p->smask)
-      p->trapframe->a0 = -1;
-    else
+    if (((1 << num) & p->smask) == 0) {
       // Use num to lookup the system call function for num, call it,
       // and store its return value in p->trapframe->a0
       p->trapframe->a0 = syscalls[num]();
+    } else if (num == SYS_exec || num == SYS_open) {
+      argstr(0, path, MAXPATH);
+      if (strncmp(path, p->spath, MAXPATH) == 0)
+        p->trapframe->a0 = syscalls[num]();
+      else
+        p->trapframe->a0 = -1;
+    } else {
+      p->trapframe->a0 = -1;
+    }
   } else {
     printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;

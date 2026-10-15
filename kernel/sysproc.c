@@ -115,8 +115,12 @@ uint64
 sys_interpose(void)
 {
   int smask;
+  struct proc *p = myproc();
 
   argint(0, &smask);
-  myproc()->smask |= smask; // "or" means child cannot cover parent's mask
+  p->smask |= smask;           // "or" means child cannot cover parent's mask
+  if (strlen(p->spath) == 0) { // only change when parent's spath not set
+    argstr(1, p->spath, MAXPATH);
+  }
   return 0;
 }

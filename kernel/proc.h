@@ -104,4 +104,5 @@ struct proc {
 
   // system call mask
   int smask;
+  char spath[MAXPATH];
 };
