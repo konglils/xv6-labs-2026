@@ -125,8 +125,8 @@ found:
   p->state = USED;
 
   // Allocate a trapframe and a usyscall page.
-  if ((p->trapframe = (struct trapframe *)kalloc()) == 0
-      || (p->usyscall = (struct usyscall *)kalloc()) == 0) {
+  if ((p->trapframe = (struct trapframe *)kalloc()) == 0 ||
+      (p->usyscall = (struct usyscall *)kalloc()) == 0) {
     freeproc(p);
     release(&p->lock);
     return 0;
@@ -292,7 +292,6 @@ kfork(void)
   }
   np->sz = p->sz;
 
-
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -357,7 +356,6 @@ kexit(int status)
       p->ofile[fd] = 0;
     }
   }
-
 
   begin_op();
   iput(p->cwd);
@@ -731,4 +729,3 @@ procdump(void)
     printk("\n");
   }
 }
-
