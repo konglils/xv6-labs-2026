@@ -154,28 +154,31 @@ vmprinthelper(pagetable_t pagetable, uint64 va, int level)
   int i, j;
   for (i = 0; i < 512; i++) {
     pte_t pte = pagetable[i];
-    if (pte & PTE_V) {
-      for (j = 0; j < 3 - level; j++) {
-        printk(" ..");
-      }
-      uint64 child = PTE2PA(pte);
-      uint64 p = va + ((uint64)i << PXSHIFT(level));
-      printk("%p: pte %p pa %p", (void *)p, (void *)pte, (void *)PTE2PA(pte));
-      if (level == 0) {
-        printk(" ");
-        if (pte & PTE_R)
-          printk("R");
-        if (pte & PTE_W)
-          printk("W");
-        if (pte & PTE_X)
-          printk("X");
-        if (pte & PTE_U)
-          printk("U");
-      }
-      printk("\n");
-      if (level > 0)
-        vmprinthelper((pagetable_t)child, p, level - 1);
+    if (!(pte & PTE_V))
+      continue;
+
+    for (j = 0; j < 3 - level; j++) {
+      printk(" ..");
     }
+    uint64 child = PTE2PA(pte);
+    uint64 va1 = va + ((uint64)i << PXSHIFT(level));
+    printk("%p: pte %p pa %p", (void *)va1, (void *)pte, (void *)PTE2PA(pte));
+    if (PTE_LEAF(pte)) {
+      printk(" ");
+      if (pte & PTE_R)
+        printk("R");
+      if (pte & PTE_W)
+        printk("W");
+      if (pte & PTE_X)
+        printk("X");
+      if (pte & PTE_U)
+        printk("U");
+      if (level > 0)
+        printk(" SUPER");
+    }
+    printk("\n");
+    if (!PTE_LEAF(pte))
+      vmprinthelper((pagetable_t)child, va1, level - 1);
   }
 }
 
@@ -188,6 +191,82 @@ vmprint(pagetable_t pagetable)
 }
 #endif
 
+pte_t *
+superwalk(pagetable_t pagetable, uint64 va)
+{
+  if (va >= MAXVA)
+    panic("superwalk");
+
+  pte_t *pte = &pagetable[PX(2, va)];
+  if (*pte & PTE_V) {
+    pagetable = (pagetable_t)PTE2PA(*pte);
+  } else {
+    if ((pagetable = (pde_t *)kalloc()) == 0)
+      return 0;
+    memset(pagetable, 0, PGSIZE);
+  }
+  return &pagetable[PX(1, va)];
+}
+
+// We must make our best to use superpage, or pgtbltest will fail.
+int
+supermappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+{
+  uint64 vsuperstart, psuperstart, vsuperend, psuperend;
+  uint64 vsupersz, psupersz, supersz;
+  uint64 va1, pa1;
+  pte_t *pte;
+
+  if (size < SUPERPGSIZE)
+    return mappages(pagetable, va, size, pa, perm);
+
+  if ((va % PGSIZE) != 0)
+    panic("supermappages: va not aligned");
+
+  if ((size % PGSIZE) != 0)
+    panic("supermappages: size not aligned");
+
+  vsuperstart = SUPERPGROUNDUP(va);
+  psuperstart = SUPERPGROUNDUP(pa);
+  vsupersz = SUPERPGROUNDDOWN(va + size) - vsuperstart;
+  psupersz = SUPERPGROUNDDOWN(pa + size) - psuperstart;
+  supersz = vsupersz < psupersz ? vsupersz : psupersz;
+  vsuperend = vsuperstart + supersz;
+  psuperend = psuperstart + supersz;
+
+  va1 = va;
+  pa1 = pa;
+  for (;;) {
+    if (va1 == vsuperstart)
+      va1 = vsuperend;
+    if (va1 >= va + size)
+      break;
+    if (pa1 == psuperstart)
+      pa1 = psuperend;
+
+    if ((pte = walk(pagetable, va1, 1)) == 0)
+      return -1;
+    if (*pte & PTE_V)
+      panic("supermappages: remap");
+    *pte = PA2PTE(pa1) | perm | PTE_V;
+
+    va1 += PGSIZE;
+    pa1 += PGSIZE;
+  }
+
+  va1 = vsuperstart;
+  pa1 = psuperstart;
+  while (va1 < vsuperend) {
+    if ((pte = superwalk(pagetable, va1)) == 0)
+      return -1;
+    if (*pte & PTE_V)
+      panic("supermappages: remap");
+    *pte = PA2PTE(pa1) | perm | PTE_V;
+    va1 += SUPERPGSIZE;
+    pa1 += SUPERPGSIZE;
+  }
+  return 0;
+}
 
 // add a mapping to the kernel page table.
 // only used when booting.
@@ -195,7 +274,7 @@ vmprint(pagetable_t pagetable)
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
-  if (mappages(kpgtbl, va, sz, pa, perm) != 0)
+  if (supermappages(kpgtbl, va, sz, pa, perm) != 0)
     panic("kvmmap");
 }
 
