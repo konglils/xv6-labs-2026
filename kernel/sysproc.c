@@ -111,7 +111,27 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
-  return 0;
+  uint64 va, bits;
+  int i, npage;
+  char buf[512] = {};
+  struct proc *p = myproc();
+  argaddr(0, &va);
+  argint(1, &npage);
+  if (npage < 1)
+    return -1;
+  argaddr(2, &bits);
+
+  for (i = 0; i < npage; i++, va += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (!pte || !(*pte & PTE_V))
+      return -1;
+    if (*pte & PTE_A) {
+      buf[i / 8] |= 1 << (i % 8);
+    }
+    *pte &= ~PTE_A;
+  }
+
+  return copyout(p->pagetable, p->sz, bits, buf, (npage - 1) / 8 + 1);
 }
 #endif
 
