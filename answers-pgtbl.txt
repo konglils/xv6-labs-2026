@@ -1,0 +1,8 @@
+sbrk(0) means query process size. It only change when call sbrk with a non-zero value.
+We can add a sz field to struct usyscall in the page. Every sbrk(0) can just read the field without trap.
+And update it when call sbrk with non-zero value.
+
+call ksupernpte:
+not use superpage: s=0, n=49219
+use superpage: s=95, n=579
+save 95 * 512 = 49219 - 579 = 48640 bottom-level pages
