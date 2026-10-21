@@ -150,3 +150,17 @@ printkinit(void)
 {
   initlock(&pr.lock, "pr");
 }
+
+void
+backtrace(void)
+{
+  uint64 base, fp, ra;
+  fp = r_fp();
+  base = PGROUNDUP(fp); // kernel stack is page aligned and just one page
+  printk("backtrace:\n");
+  while (fp < base) {
+    ra = *(uint64 *)(fp - 8);
+    printk("%p\n", (void *)ra);
+    fp = *(uint64 *)(fp - 16);
+  }
+}
