@@ -124,7 +124,7 @@ sys_sigalarm(void)
   p->alarming = 0;
   p->interval = interval;
   p->handler = handler;
-  p->lastcall = sys_uptime();
+  p->passed = 0;
   return 0;
 }
 

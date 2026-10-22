@@ -106,5 +106,5 @@ struct proc {
   int alarming;
   int interval;
   uint64 handler;
-  uint lastcall;
+  int passed;
 };

@@ -149,7 +149,7 @@ found:
   p->alarming = 0;
   p->interval = 0;
   p->handler = 0;
-  p->lastcall = 0;
+  p->passed = 0;
 
   return p;
 }
