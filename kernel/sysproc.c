@@ -112,3 +112,28 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigalarm(void)
+{
+  int interval;
+  uint64 handler;
+  struct proc *p = myproc();
+  argint(0, &interval);
+  argaddr(1, &handler);
+  p->alarming = 0;
+  p->interval = interval;
+  p->handler = handler;
+  p->lastcall = sys_uptime();
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+  p->alarming = 0;
+  memmove(p->trapframe, (void *)p->trapframe + 512,
+          sizeof(struct trapframe));
+  return p->trapframe->a0; // look at syscall()
+}

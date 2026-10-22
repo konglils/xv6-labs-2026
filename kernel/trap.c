@@ -38,6 +38,7 @@ uint64
 usertrap(void)
 {
   int which_dev = 0;
+  uint xticks;
 
   if ((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -80,6 +81,22 @@ usertrap(void)
 
   if (killed(p))
     kexit(-1);
+
+  if (which_dev == 2 && p->interval > 0 && !p->alarming) {
+    // a process may miss many timer interrupts while not running,
+    // so use uptime to measure the actual passed time
+    // since last call to alarm handler.
+    acquire(&tickslock);
+    xticks = ticks;
+    release(&tickslock);
+    if (xticks >= p->lastcall + p->interval) {
+      p->alarming = 1;
+      p->lastcall = xticks;
+      memmove((void *)p->trapframe + 512, p->trapframe,
+              sizeof(struct trapframe));
+      p->trapframe->epc = p->handler;
+    }
+  }
 
   // give up the CPU if this is a timer interrupt.
   if (which_dev == 2)
