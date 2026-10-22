@@ -133,7 +133,6 @@ sys_sigreturn(void)
 {
   struct proc *p = myproc();
   p->alarming = 0;
-  memmove(p->trapframe, (void *)p->trapframe + 512,
-          sizeof(struct trapframe));
+  memmove(p->trapframe, (void *)p->trapframe + 512, sizeof(struct trapframe));
   return p->trapframe->a0; // look at syscall()
 }
