@@ -9,6 +9,13 @@
 #include "riscv.h"
 #include "defs.h"
 
+#define REF_INDEX(pa) (((uint64)(pa) - PGROUNDUP((uint64)end)) / PGSIZE)
+
+struct {
+  struct spinlock lock;
+  uint8 count[NPAGE];
+} kref;
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
@@ -26,6 +33,8 @@ struct {
 void
 kinit()
 {
+  initlock(&kref.lock, "kref");
+  memset(kref.count, 0, sizeof(kref.count));
   initlock(&kmem.lock, "kmem");
   freerange(end, (void *)PHYSTOP);
 }
@@ -46,10 +55,24 @@ freerange(void *pa_start, void *pa_end)
 void
 kfree(void *pa)
 {
+  int i;
+  uint8 count;
   struct run *r;
 
   if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  i = REF_INDEX(pa);
+
+  acquire(&kref.lock);
+  count = kref.count[i];
+  count = count > 0 ? count - 1 : 0;
+  kref.count[i] = count;
+  release(&kref.lock);
+
+  if (count > 0) {
+    return;
+  }
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -68,6 +91,7 @@ kfree(void *pa)
 void *
 kalloc(void)
 {
+  int i;
   struct run *r;
 
   acquire(&kmem.lock);
@@ -76,7 +100,31 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if (r)
+  if (r) {
     memset((char *)r, 5, PGSIZE); // fill with junk
+
+    i = REF_INDEX(r);
+
+    acquire(&kref.lock);
+    kref.count[i] = 1;
+    release(&kref.lock);
+  }
   return (void *)r;
+}
+
+// Plus a count when a physical page is
+// referenced by one more PTEs.
+void
+krefplus(void *pa)
+{
+  int i;
+
+  if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end || (uint64)pa >= PHYSTOP)
+    panic("krefplus");
+
+  i = REF_INDEX(pa);
+
+  acquire(&kref.lock);
+  kref.count[i]++;
+  release(&kref.lock);
 }

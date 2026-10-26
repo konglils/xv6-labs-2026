@@ -290,9 +290,8 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 }
 
 // Given a parent process's page table, copy
-// its memory into a child's page table.
-// Copies both the page table and the
-// physical memory.
+// its PTE into a child's page table.
+// Mark PTE as COW when page is writable.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
 int
@@ -300,29 +299,22 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
-  uint flags;
-  char *mem;
 
   for (i = 0; i < sz; i += PGSIZE) {
     if ((pte = walk(old, i, 0)) == 0)
       continue; // page table entry hasn't been allocated
     if ((*pte & PTE_V) == 0)
       continue; // physical page hasn't been allocated
+    if (!(*pte & PTE_C) && *pte & PTE_W)
+      *pte = (*pte | PTE_C) & ~PTE_W; // not COW page and writable
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if ((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char *)pa, PGSIZE);
-    if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
-      kfree(mem);
-      goto err;
+    if (mappages(new, i, PGSIZE, pa, PTE_FLAGS(*pte)) != 0) {
+      uvmunmap(new, 0, i / PGSIZE, 1);
+      return -1;
     }
+    krefplus((void *)pa);
   }
   return 0;
-
-err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
-  return -1;
 }
 
 // mark a PTE invalid for user access.
@@ -336,6 +328,25 @@ uvmclear(pagetable_t pagetable, uint64 va)
   if (pte == 0)
     panic("uvmclear");
   *pte &= ~PTE_U;
+}
+
+// Make COW page be normal page.
+uint64
+copyonwrite(pte_t *pte)
+{
+  uint64 mem, pa;
+
+  if (!(*pte & PTE_C))
+    return 0;
+
+  mem = (uint64)kalloc();
+  if (mem == 0)
+    return 0;
+  pa = PTE2PA(*pte);
+  memmove((void *)mem, (void *)pa, PGSIZE);
+  kfree((void *)pa);
+  *pte = PA2PTE(mem) | ((PTE_FLAGS(*pte) & ~PTE_C) | PTE_W);
+  return mem;
 }
 
 // Copy from kernel to user.
@@ -360,9 +371,10 @@ copyout(pagetable_t pagetable, uint64 psz, uint64 dstva, char *src, uint64 len)
     }
 
     pte = walk(pagetable, va0, 0);
-    // forbid copyout over read-only user text pages.
-    if ((*pte & PTE_W) == 0)
-      return -1;
+    if (*pte & PTE_C)
+      pa0 = copyonwrite(pte);
+    else if ((*pte & PTE_W) == 0)
+      return -1; // forbid copyout over read-only user text pages.
 
     n = PGSIZE - (dstva - va0);
     if (n > len)
@@ -459,12 +471,14 @@ uint64
 vmfault(pagetable_t pagetable, uint64 psz, uint64 va, int read)
 {
   uint64 mem;
+  pte_t *pte;
 
   if (va >= psz)
     return 0;
   va = PGROUNDDOWN(va);
   if (ismapped(pagetable, va)) {
-    return 0;
+    pte = walk(pagetable, va, 0);
+    return copyonwrite(pte);
   }
   mem = (uint64)kalloc();
   if (mem == 0)
