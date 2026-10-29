@@ -130,7 +130,7 @@ static void
 read_acquire_inner(struct rwspinlock *rwlk)
 {
   // Put your implementation here.
-  while (__atomic_fetch_add(&rwlk->rlock, 1, __ATOMIC_ACQUIRE) < 0)
+  while (__atomic_fetch_add(&rwlk->rlock, 1, __ATOMIC_ACQUIRE) & RWLK_P)
     __atomic_fetch_sub(&rwlk->rlock, 1, __ATOMIC_RELAXED);
 }
 
