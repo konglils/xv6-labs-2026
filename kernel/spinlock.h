@@ -11,9 +11,13 @@ struct spinlock {
 #endif
 };
 
+#define RWLK_P (1 << 31)
+
 #ifdef LAB_LOCK
 // Reader-writer lock.
 struct rwspinlock {
   // Put your implementation here.
+  int rlock;
+  int wlock;
 };
 #endif
