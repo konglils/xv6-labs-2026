@@ -12,11 +12,11 @@
 
 // xv6's ethernet MAC and IP addresses.
 // these are determined by qemu.
-static uint8 local_mac[ETHADDR_LEN] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
+static uint8 local_mac[ETHADDR_LEN] = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56};
 static uint32 local_ip = MAKE_IP_ADDR(10, 0, 2, 15);
 
 // qemu host's ethernet address.
-static uint8 host_mac[ETHADDR_LEN] = { 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02 };
+static uint8 host_mac[ETHADDR_LEN] = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x02};
 
 static struct spinlock netlock;
 
@@ -25,7 +25,6 @@ netinit(void)
 {
   initlock(&netlock, "netlock");
 }
-
 
 //
 // bind(int port)
@@ -96,7 +95,7 @@ in_cksum(const unsigned char *addr, int len)
    * sequential 16 bit words to it, and at the end, fold back all the
    * carry bits from the top 16 bits into the lower 16 bits.
    */
-  while (nleft > 1)  {
+  while (nleft > 1) {
     sum += *w++;
     nleft -= 2;
   }
@@ -136,17 +135,17 @@ sys_send(void)
   argint(4, &len);
 
   int total = len + sizeof(struct eth) + sizeof(struct ip) + sizeof(struct udp);
-  if(total > PGSIZE)
+  if (total > PGSIZE)
     return -1;
 
   char *buf = kalloc();
-  if(buf == 0){
+  if (buf == 0) {
     printk("sys_send: kalloc failed\n");
     return -1;
   }
   memset(buf, 0, PGSIZE);
 
-  struct eth *eth = (struct eth *) buf;
+  struct eth *eth = (struct eth *)buf;
   memmove(eth->dhost, host_mac, ETHADDR_LEN);
   memmove(eth->shost, local_mac, ETHADDR_LEN);
   eth->type = htons(ETHTYPE_IP);
@@ -169,7 +168,7 @@ sys_send(void)
   udp->ulen = htons(len + sizeof(struct udp));
 
   char *payload = (char *)(udp + 1);
-  if(copyin(p->pagetable, p->sz, payload, bufaddr, len) < 0){
+  if (copyin(p->pagetable, p->sz, payload, bufaddr, len) < 0) {
     kfree(buf);
     printk("send: copyin failed\n");
     return -1;
@@ -185,7 +184,7 @@ ip_rx(char *buf, int len)
 {
   // don't delete this printk; make grade depends on it.
   static int seen_ip = 0;
-  if(seen_ip == 0)
+  if (seen_ip == 0)
     printk("ip_rx: received an IP packet\n");
   seen_ip = 1;
 
@@ -194,7 +193,6 @@ ip_rx(char *buf, int len)
   //
   // Your code here.
   //
-  
 }
 
 //
@@ -209,23 +207,25 @@ arp_rx(char *inbuf)
 {
   static int seen_arp = 0;
 
-  if(seen_arp){
+  if (seen_arp) {
     kfree(inbuf);
     return;
   }
   printk("arp_rx: received an ARP packet\n");
   seen_arp = 1;
 
-  struct eth *ineth = (struct eth *) inbuf;
-  struct arp *inarp = (struct arp *) (ineth + 1);
+  struct eth *ineth = (struct eth *)inbuf;
+  struct arp *inarp = (struct arp *)(ineth + 1);
 
   char *buf = kalloc();
-  if(buf == 0)
+  if (buf == 0)
     panic("send_arp_reply");
-  
-  struct eth *eth = (struct eth *) buf;
-  memmove(eth->dhost, ineth->shost, ETHADDR_LEN); // ethernet destination = query source
-  memmove(eth->shost, local_mac, ETHADDR_LEN); // ethernet source = xv6's ethernet address
+
+  struct eth *eth = (struct eth *)buf;
+  memmove(eth->dhost, ineth->shost,
+          ETHADDR_LEN); // ethernet destination = query source
+  memmove(eth->shost, local_mac,
+          ETHADDR_LEN); // ethernet source = xv6's ethernet address
   eth->type = htons(ETHTYPE_ARP);
 
   struct arp *arp = (struct arp *)(eth + 1);
@@ -252,13 +252,13 @@ arp_rx(char *inbuf)
 void
 net_rx(char *buf, int len)
 {
-  struct eth *eth = (struct eth *) buf;
+  struct eth *eth = (struct eth *)buf;
 
-  if(len >= sizeof(struct eth) + sizeof(struct arp) &&
-     ntohs(eth->type) == ETHTYPE_ARP){
+  if (len >= sizeof(struct eth) + sizeof(struct arp) &&
+      ntohs(eth->type) == ETHTYPE_ARP) {
     arp_rx(buf);
-  } else if(len >= sizeof(struct eth) + sizeof(struct ip) &&
-     ntohs(eth->type) == ETHTYPE_IP){
+  } else if (len >= sizeof(struct eth) + sizeof(struct ip) &&
+             ntohs(eth->type) == ETHTYPE_IP) {
     ip_rx(buf, len);
   } else {
     printk("net_rx: unknown ether type %x\n", ntohs(eth->type));

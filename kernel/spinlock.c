@@ -274,13 +274,13 @@ sys_rwlktest()
     for (int i = 0; i < 1000000; i++) {
       preempted = !preempted;
 
-      *(uint32*) (CLINT(buddy)) = preempted;
+      *(uint32 *)(CLINT(buddy)) = preempted;
       read_acquire(&l);
       read_release(&l);
     }
 
     preempted = 0;
-    *(uint32*) (CLINT(buddy)) = preempted;
+    *(uint32 *)(CLINT(buddy)) = preempted;
   } else {
     for (int i = 0; i < 1000000; i++) {
       read_acquire(&l);
