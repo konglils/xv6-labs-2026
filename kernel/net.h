@@ -122,3 +122,14 @@ struct dns_data {
   uint32 ttl;
   uint16 len;
 } __attribute__((packed));
+
+#define NBIND    16 // maximum number of bind ports
+#define NPORTPKT 16 // maximum number of packets in queue per port
+
+struct bind {
+  uint16 port;
+  int receiving;
+  int base;
+  int len;
+  char *queue[NPORTPKT];
+};

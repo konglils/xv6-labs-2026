@@ -20,10 +20,25 @@ static uint8 host_mac[ETHADDR_LEN] = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x02};
 
 static struct spinlock netlock;
 
+static struct bind bind[NBIND];
+
+// must call with netlock
+static struct bind *
+find_bind(uint16 port)
+{
+  struct bind *b;
+  for (b = bind; b < bind + NBIND; b++) {
+    if (b->port == port)
+      return b;
+  }
+  return 0;
+}
+
 void
 netinit(void)
 {
   initlock(&netlock, "netlock");
+  memset(bind, 0, sizeof(bind));
 }
 
 //
@@ -37,7 +52,30 @@ sys_bind(void)
   //
   // Your code here.
   //
+  uint16 port;
+  struct bind *b;
 
+  argint(0, (int *)&port);
+
+  acquire(&netlock);
+
+  b = find_bind(port);
+  if (b) {
+    release(&netlock);
+    return 0;
+  }
+
+  b = find_bind(0);
+  if (b) {
+    b->port = port;
+    b->base = 0;
+    b->len = 0;
+    release(&netlock);
+    return 0;
+  }
+
+  release(&netlock);
+  printk("sys_bind: cannot bind port\n");
   return -1;
 }
 
@@ -52,7 +90,35 @@ sys_unbind(void)
   //
   // Your code here.
   //
+  uint16 port;
+  struct bind *b;
+  char **buf;
 
+  argint(0, (int *)&port);
+
+  acquire(&netlock);
+
+  b = find_bind(port);
+  if (!b) {
+    release(&netlock);
+    return 0;
+  }
+
+  if (b->receiving) {
+    release(&netlock);
+    printk("sys_unbind: port %d is receiving", port);
+    return -1;
+  }
+
+  b->port = 0;
+  b->base = 0;
+  b->len = 0;
+  for (buf = b->queue; buf < b->queue + NPORTPKT; buf++) {
+    if (*buf)
+      kfree(*buf);
+  }
+
+  release(&netlock);
   return 0;
 }
 
@@ -77,7 +143,63 @@ sys_recv(void)
   //
   // Your code here.
   //
-  return -1;
+  uint16 dport;
+  uint64 src, sport, buf;
+  uint32 maxlen;
+  struct bind *b;
+  struct proc *p = myproc();
+
+  argint(0, (int *)&dport);
+  argaddr(1, &src);
+  argaddr(2, &sport);
+  argaddr(3, &buf);
+  argint(4, (int *)&maxlen);
+
+  acquire(&netlock);
+
+  b = find_bind(dport);
+
+  if (!b) {
+    printk("sys_recv: port %d not bound\n", dport);
+    release(&netlock);
+    return -1;
+  }
+  b->receiving = 1;
+
+  while (b->len == 0) {
+    sleep_prepare(b);
+    release(&netlock);
+    sleep();
+    acquire(&netlock);
+  }
+
+  char *inbuf = b->queue[b->base];
+  b->queue[b->base] = 0;
+  b->base = (b->base + 1) % NPORTPKT;
+  b->len--;
+  b->receiving = 0;
+  release(&netlock);
+
+  struct eth *eth = (struct eth *)inbuf;
+  struct ip *ip = (struct ip *)(eth + 1);
+  struct udp *udp = (struct udp *)(ip + 1);
+  char *payload = (char *)(udp + 1);
+
+  uint32 ip_src = ntohl(ip->ip_src);
+  uint16 usport = ntohs(udp->sport);
+  uint32 ulen = ntohs(udp->ulen) - sizeof(struct udp);
+  uint32 len = ulen < maxlen ? ulen : maxlen;
+
+  int bad = 1;
+  if (copyout(p->pagetable, p->sz, src, (char *)&ip_src, sizeof(ip_src)) >= 0 &&
+      copyout(p->pagetable, p->sz, sport, (char *)&usport, sizeof(usport)) >=
+        0 &&
+      copyout(p->pagetable, p->sz, buf, payload, len) >= 0)
+    bad = 0;
+
+  kfree(inbuf);
+
+  return bad ? -1 : len;
 }
 
 // This code is lifted from FreeBSD's ping.c, and is copyright by the Regents
@@ -193,6 +315,39 @@ ip_rx(char *buf, int len)
   //
   // Your code here.
   //
+  struct eth *eth = (struct eth *)buf;
+  struct ip *ip = (struct ip *)(eth + 1);
+
+  if (ip->ip_p != IPPROTO_UDP) {
+    kfree(buf);
+    return;
+  }
+  struct udp *udp = (struct udp *)(ip + 1);
+
+  acquire(&netlock);
+
+  struct bind *b = find_bind(ntohs(udp->dport));
+
+  if (!b) {
+    release(&netlock);
+    kfree(buf);
+    return;
+  }
+
+  if (b->len == NPORTPKT) {
+    release(&netlock);
+    kfree(buf);
+    return;
+  }
+
+  int i = (b->base + b->len) % NPORTPKT;
+  b->queue[i] = buf;
+  b->len++;
+
+  if (b->len == 1)
+    wakeup(b);
+
+  release(&netlock);
 }
 
 //
