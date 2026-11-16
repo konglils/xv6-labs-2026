@@ -237,6 +237,7 @@ void            pci_init();
 // tulip.c
 void            tulip_init(volatile uint64 *);
 void            tulip_xmit(char *, int);
+void            tulip_intr(void);
 
 // net.c
 void            netinit(void);

@@ -81,7 +81,6 @@ usertrap(void)
   if (killed(p))
     kexit(-1);
 
-
   // give up the CPU if this is a timer interrupt.
   if (which_dev == 2)
     yield();
@@ -200,8 +199,9 @@ devintr()
       uartintr();
     } else if (irq == VIRTIO0_IRQ) {
       virtio_disk_intr();
-    }
-    else if (irq) {
+    } else if (irq == TULIP_IRQ) {
+      tulip_intr();
+    } else if (irq) {
       printk("unexpected interrupt irq=%d\n", irq);
     }
 
