@@ -896,6 +896,20 @@ countfree()
   return n;
 }
 
+void
+unbind_all()
+{
+  unbind(2000);
+  unbind(2001);
+  unbind(2004);
+  unbind(2005);
+  unbind(2006);
+  unbind(2007);
+  unbind(2008);
+  unbind(2009);
+  unbind(10000);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -936,6 +950,7 @@ main(int argc, char *argv[])
     pause(2);
     dns();
     pause(2);
+    unbind_all();
     if ((free1 = countfree()) + 32 < free0) {
       printf("free: FAILED -- lost %d free pages; that's too many\n",
              free0 - free1);
@@ -944,6 +959,7 @@ main(int argc, char *argv[])
     }
   } else if (strcmp(argv[1], "dns") == 0) {
     dns();
+    unbind_all();
   } else {
     usage();
   }
